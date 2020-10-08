@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,8 +92,8 @@ func getRefreshedToken(conf *oauth2.Config, t string) (jose.JWT, string, time.Ti
 }
 
 // exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token
-func exchangeAuthenticationCode(client *oauth2.Config, code string) (*oauth2.Token, error) {
-	return getToken(client, GrantTypeAuthCode, code)
+func exchangeAuthenticationCode(client *oauth2.Config, code string, skipOpenIDProviderTLSVerify bool) (*oauth2.Token, error) {
+	return getToken(client, GrantTypeAuthCode, code, skipOpenIDProviderTLSVerify)
 }
 
 // getUserinfo is responsible for getting the userinfo from the IDPD
@@ -128,8 +129,20 @@ func getUserinfo(client *http.Client, endpoint string, token string) (jose.Claim
 }
 
 // getToken retrieves a code from the provider, extracts and verified the token
-func getToken(config *oauth2.Config, grantType, code string) (*oauth2.Token, error) {
-	ctx := context.Background()
+func getToken(config *oauth2.Config, grantType, code string, skipOpenIDProviderTLSVerify bool) (*oauth2.Token, error) {
+
+	var ctx context.Context
+
+	if skipOpenIDProviderTLSVerify {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		sslcli := &http.Client{Transport: tr}
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
+	} else {
+		ctx = context.Background()
+	}
+
 	start := time.Now()
 	token, err := config.Exchange(ctx, code)
 	if err != nil {
